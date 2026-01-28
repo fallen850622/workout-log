@@ -116,10 +116,11 @@
                 const isCustom = customs.hasOwnProperty(title);
                 const wrapper = document.createElement('div');
                 wrapper.className = 'item-wrapper';
-                let deleteHTML = isCustom ? `<div class="delete-btn" onclick="deleteCustomItem('${title}')">刪除</div>` : '';
+                
+                let deleteBtnHtml = isCustom ? `<div class="delete-btn" onclick="deleteCustomItem('${title}')">刪除</div>` : '';
                 
                 wrapper.innerHTML = `
-                    ${deleteHTML}
+                    ${deleteBtnHtml}
                     <div class="training-group" id="item-${title}" ontouchstart="handleTouchStart(event)" ontouchmove="handleTouchMove(event, '${title}', ${isCustom})">
                         <div class="group-header" onclick="toggleWorkout(this, '${title}')">
                             <span>${title}</span><span class="status">○</span>
@@ -234,7 +235,6 @@
             }
         }
 
-        // 初始化
         window.onload = () => {
             initWorkoutList();
             renderCalendar();
