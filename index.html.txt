@@ -12,7 +12,6 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
         
-        /* 月曆 */
         .calendar-card { background: var(--card); border-radius: 20px; padding: 15px; width: 100%; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px; }
         .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
@@ -20,7 +19,6 @@
         .day.selected { background: var(--accent); color: white; }
         .day.has-workout::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: var(--success); border-radius: 50%; }
 
-        /* 身體數據 */
         .stats-card { background: var(--card); border-radius: 20px; padding: 15px; width: 100%; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px; }
         .stats-grid { display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 10px; }
         .input-group { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -28,7 +26,6 @@
         .input-group input { border: 1px solid var(--blue-light); border-radius: 10px; padding: 10px 5px; font-size: 0.9rem; color: var(--text); outline: none; text-align: center; width: 100%; }
         .bmi-display { background: var(--item-bg); padding: 10px; border-radius: 12px; text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--success); width: 100%; }
 
-        /* 紀錄清單 */
         .log-container { width: 100%; max-width: 450px; }
         .item-wrapper { position: relative; margin-bottom: 10px; overflow: hidden; border-radius: 15px; border: 1px solid #cfd8dc; background: var(--danger); }
         .training-group { background: var(--card); transition: transform 0.3s ease; position: relative; z-index: 2; }
@@ -40,7 +37,7 @@
 
         .delete-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 80px; background: var(--danger); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold; z-index: 1; border-radius: 0 15px 15px 0; }
         .btn-add { width: 100%; padding: 15px; background: transparent; border: 2px dashed var(--accent); border-radius: 12px; color: var(--accent); font-weight: bold; margin-top: 5px; margin-bottom: 40px; }
-        .nav-btn { background: none; border: none; font-size: 1.5rem; color: var(--accent); padding: 0 10px; }
+        .nav-btn { background: none; border: none; font-size: 1.5rem; color: var(--accent); padding: 0 10px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -70,7 +67,6 @@
     </div>
 
     <script>
-        // 整合 Excel 管制表的所有項目
         const workoutData = {
             "腹肌": ["Dead bug (15下) / 慢速登山者 (15下)", "Leg raise combo (15下) / 後仰坐姿肩推 (3kg*15下)"],
             "直角肩": ["開合跳肩推 (20下*5組) / 伏地挺身+側轉體 (12下)", "Walking w (12下) / 肩環繞 (12下)"],
@@ -120,7 +116,7 @@
                 const isCustom = customs.hasOwnProperty(title);
                 const wrapper = document.createElement('div');
                 wrapper.className = 'item-wrapper';
-                let deleteHTML = isCustom ? <div class="delete-btn" onclick="deleteCustomItem('${title}')">刪除</div> : '';
+                let deleteHTML = isCustom ? `<div class="delete-btn" onclick="deleteCustomItem('${title}')">刪除</div>` : '';
                 
                 wrapper.innerHTML = `
                     ${deleteHTML}
@@ -134,6 +130,86 @@
                     </div>
                 `;
                 container.appendChild(wrapper);
+            }
+        }
+
+        function toggleWorkout(header, title) {
+            header.classList.toggle('active');
+            header.nextElementSibling.classList.toggle('show');
+            header.querySelector('.status').innerText = header.classList.contains('active') ? '●' : '○';
+            saveDailyData();
+        }
+
+        function saveDailyData() {
+            const activeItems = [];
+            document.querySelectorAll('.group-header.active').forEach(h => {
+                activeItems.push(h.querySelector('span').innerText);
+            });
+            localStorage.setItem('workout_' + selectedDateStr, JSON.stringify(activeItems));
+            renderCalendar();
+        }
+
+        function loadDailyData(dateStr) {
+            selectedDateStr = dateStr;
+            document.getElementById('selectedDateText').innerText = `日期：${dateStr}`;
+            const activeItems = JSON.parse(localStorage.getItem('workout_' + dateStr) || '[]');
+            
+            document.querySelectorAll('.group-header').forEach(header => {
+                const title = header.querySelector('span').innerText;
+                if (activeItems.includes(title)) {
+                    header.classList.add('active');
+                    header.querySelector('.status').innerText = '●';
+                } else {
+                    header.classList.remove('active');
+                    header.querySelector('.status').innerText = '○';
+                }
+                header.nextElementSibling.classList.remove('show');
+            });
+            loadBodyStats(dateStr);
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+            const year = currentViewDate.getFullYear();
+            const month = currentViewDate.getMonth();
+            document.getElementById('monthYearDisplay').innerText = `${year}年 ${month + 1}月`;
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                grid.appendChild(document.createElement('div'));
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateEl = document.createElement('div');
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                dateEl.className = 'day' + (dateStr === selectedDateStr ? ' selected' : '');
+                if (localStorage.getItem('workout_' + dateStr)) dateEl.classList.add('has-workout');
+                dateEl.innerText = d;
+                dateEl.onclick = () => {
+                    document.querySelectorAll('.day').forEach(el => el.classList.remove('selected'));
+                    dateEl.classList.add('selected');
+                    loadDailyData(dateStr);
+                };
+                grid.appendChild(dateEl);
+            }
+        }
+
+        function changeMonth(step) {
+            currentViewDate.setMonth(currentViewDate.getMonth() + step);
+            renderCalendar();
+        }
+
+        function addNewItem() {
+            const name = prompt("請輸入自定義項目名稱：");
+            if (name) {
+                const customs = JSON.parse(localStorage.getItem('customWorkouts') || '{}');
+                customs[name] = ["自定義項目內容"];
+                localStorage.setItem('customWorkouts', JSON.stringify(customs));
+                initWorkoutList();
+                loadDailyData(selectedDateStr);
             }
         }
 
@@ -158,13 +234,12 @@
             }
         }
 
-        function toggleWorkout(header, title) {
-            header.classList.toggle('active');
-            header.nextElementSibling.classList.toggle('show');
-            header.querySelector('.status').innerText = header.classList.contains('active') ? '●' : '○';
-            saveDailyData();
-        }
-
-        function saveDailyData() {
-            const activeItems = [];
-            document.querySelectorAll('.group-header.active').forEach(h => activeItems.push(h.querySelector('span').innerText));
+        // 初始化
+        window.onload = () => {
+            initWorkoutList();
+            renderCalendar();
+            loadDailyData(selectedDateStr);
+        };
+    </script>
+</body>
+</html>
