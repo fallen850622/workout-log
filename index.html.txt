@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>運動管制與重訓紀錄</title>
+    <style>
+        :root {
+            --bg: #f0f4f7; --card: #ffffff; --text: #37474f; --accent: #90a4ae;
+            --success: #546e7a; --item-bg: #e1e8ed; --blue-light: #cfd8dc; --danger: #ef5350;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
+        
+        /* 月曆 */
+        .calendar-card { background: var(--card); border-radius: 20px; padding: 15px; width: 100%; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .day { padding: 10px 0; border-radius: 8px; font-size: 0.8rem; cursor: pointer; color: #90a4ae; position: relative; }
+        .day.selected { background: var(--accent); color: white; }
+        .day.has-workout::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: var(--success); border-radius: 50%; }
+
+        /* 身體數據 */
+        .stats-card { background: var(--card); border-radius: 20px; padding: 15px; width: 100%; max-width: 450px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 12px; }
+        .stats-grid { display: flex; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 10px; }
+        .input-group { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .input-group label { font-size: 0.65rem; color: var(--accent); margin-bottom: 4px; text-align: center; }
+        .input-group input { border: 1px solid var(--blue-light); border-radius: 10px; padding: 10px 5px; font-size: 0.9rem; color: var(--text); outline: none; text-align: center; width: 100%; }
+        .bmi-display { background: var(--item-bg); padding: 10px; border-radius: 12px; text-align: center; font-size: 0.85rem; font-weight: bold; color: var(--success); width: 100%; }
+
+        /* 紀錄清單 */
+        .log-container { width: 100%; max-width: 450px; }
+        .item-wrapper { position: relative; margin-bottom: 10px; overflow: hidden; border-radius: 15px; border: 1px solid #cfd8dc; background: var(--danger); }
+        .training-group { background: var(--card); transition: transform 0.3s ease; position: relative; z-index: 2; }
+        .group-header { padding: 15px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: bold; font-size: 0.95rem; }
+        .group-header.active { background: var(--success); color: white; }
+        .details { padding: 15px; background: var(--item-bg); font-size: 0.85rem; line-height: 1.5; border-top: 1px solid #cfd8dc; display: none; }
+        .details.show { display: block; }
+        .action-item { margin-bottom: 6px; padding-left: 8px; border-left: 3px solid var(--success); }
+
+        .delete-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 80px; background: var(--danger); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold; z-index: 1; border-radius: 0 15px 15px 0; }
+        .btn-add { width: 100%; padding: 15px; background: transparent; border: 2px dashed var(--accent); border-radius: 12px; color: var(--accent); font-weight: bold; margin-top: 5px; margin-bottom: 40px; }
+        .nav-btn { background: none; border: none; font-size: 1.5rem; color: var(--accent); padding: 0 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="calendar-card">
+        <div class="calendar-header">
+            <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+            <span id="monthYearDisplay"></span>
+            <button class="nav-btn" onclick="changeMonth(1)">›</button>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+    </div>
+
+    <div class="stats-card">
+        <div class="stats-grid">
+            <div class="input-group"><label>身高(cm)</label><input type="number" id="height" oninput="calcBMI()"></div>
+            <div class="input-group"><label>體重(kg)</label><input type="number" id="weight" oninput="calcBMI()"></div>
+            <div class="input-group"><label>體脂(%)</label><input type="number" id="bodyFat" oninput="saveBodyStats()"></div>
+        </div>
+        <div id="bmiResult" class="bmi-display">BMI: --</div>
+    </div>
+
+    <div class="log-container">
+        <div id="selectedDateText" style="font-size: 0.8rem; color: #78909c; margin-bottom: 10px; font-weight: bold; padding-left: 5px;">日期：載入中...</div>
+        <div id="workoutList"></div>
+        <button class="btn-add" onclick="addNewItem()">+ 自定義新增項目</button>
+    </div>
+
+    <script>
+        // 整合 Excel 管制表的所有項目
+        const workoutData = {
+            "腹肌": ["Dead bug (15下) / 慢速登山者 (15下)", "Leg raise combo (15下) / 後仰坐姿肩推 (3kg*15下)"],
+            "直角肩": ["開合跳肩推 (20下*5組) / 伏地挺身+側轉體 (12下)", "Walking w (12下) / 肩環繞 (12下)"],
+            "背肌": ["俯身開背 (12下) / 短槓划船 (15下)", "單手划船 (12下) / 彈力繩划船 (15下)"],
+            "胸 (重訓)": ["胸部推舉 (12下)", "啞鈴飛鳥 (15下)"],
+            "背 (重訓)": ["滑輪下拉 (12下)", "坐姿划船 (15下)"],
+            "腿 (重訓)": ["Sumo深蹲 (20下) / 螃蟹走路 (3步+跳) 7趟", "深蹲跳 (15下) / 後弓箭步 (15下)"],
+            "三角/三頭/二頭": ["開合跳肩推 (20下*5組)", "三頭啞鈴後舉 (15下)", "啞鈴二頭彎舉 (12下)"],
+            "有氧運動": ["跑步機", "橢圓機", "登山機", "飛輪", "室內有氧"],
+            "飲食控制": ["一餐合格", "兩餐合格", "三餐+合格"]
+        };
+
+        let currentViewDate = new Date();
+        let selectedDateStr = new Date().toLocaleDateString('sv-SE');
+
+        function calcBMI() {
+            const h = document.getElementById('height').value;
+            const w = document.getElementById('weight').value;
+            if (h > 0 && w > 0) {
+                const bmi = (w / ((h/100) * (h/100))).toFixed(1);
+                document.getElementById('bmiResult').innerText = `BMI: ${bmi}`;
+            } else { document.getElementById('bmiResult').innerText = `BMI: --`; }
+            saveBodyStats();
+        }
+
+        function saveBodyStats() {
+            const stats = { h: document.getElementById('height').value, w: document.getElementById('weight').value, f: document.getElementById('bodyFat').value };
+            localStorage.setItem('stats_' + selectedDateStr, JSON.stringify(stats));
+            if(stats.h) localStorage.setItem('global_height', stats.h);
+        }
+
+        function loadBodyStats(dateStr) {
+            const saved = JSON.parse(localStorage.getItem('stats_' + dateStr) || '{}');
+            document.getElementById('height').value = saved.h || localStorage.getItem('global_height') || "";
+            document.getElementById('weight').value = saved.w || "";
+            document.getElementById('bodyFat').value = saved.f || "";
+            calcBMI();
+        }
+
+        function initWorkoutList() {
+            const container = document.getElementById('workoutList');
+            container.innerHTML = '';
+            const customs = JSON.parse(localStorage.getItem('customWorkouts') || '{}');
+            const allData = {...workoutData, ...customs};
+
+            for (let title in allData) {
+                const isCustom = customs.hasOwnProperty(title);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'item-wrapper';
+                let deleteHTML = isCustom ? <div class="delete-btn" onclick="deleteCustomItem('${title}')">刪除</div> : '';
+                
+                wrapper.innerHTML = `
+                    ${deleteHTML}
+                    <div class="training-group" id="item-${title}" ontouchstart="handleTouchStart(event)" ontouchmove="handleTouchMove(event, '${title}', ${isCustom})">
+                        <div class="group-header" onclick="toggleWorkout(this, '${title}')">
+                            <span>${title}</span><span class="status">○</span>
+                        </div>
+                        <div class="details">
+                            ${allData[title].map(item => `<div class="action-item">${item}</div>`).join('')}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(wrapper);
+            }
+        }
+
+        let startX = 0;
+        function handleTouchStart(e) { startX = e.touches[0].clientX; }
+        function handleTouchMove(e, title, isCustom) {
+            if (!isCustom) return;
+            const moveX = e.touches[0].clientX;
+            const diff = startX - moveX;
+            const el = document.getElementById('item-' + title);
+            if (diff > 50) el.style.transform = "translateX(-80px)";
+            if (diff < -50) el.style.transform = "translateX(0px)";
+        }
+
+        function deleteCustomItem(title) {
+            if (confirm(`確定要刪除「${title}」嗎？`)) {
+                const customs = JSON.parse(localStorage.getItem('customWorkouts') || '{}');
+                delete customs[title];
+                localStorage.setItem('customWorkouts', JSON.stringify(customs));
+                initWorkoutList();
+                loadDailyData(selectedDateStr);
+            }
+        }
+
+        function toggleWorkout(header, title) {
+            header.classList.toggle('active');
+            header.nextElementSibling.classList.toggle('show');
+            header.querySelector('.status').innerText = header.classList.contains('active') ? '●' : '○';
+            saveDailyData();
+        }
+
+        function saveDailyData() {
+            const activeItems = [];
+            document.querySelectorAll('.group-header.active').forEach(h => activeItems.push(h.querySelector('span').innerText));
